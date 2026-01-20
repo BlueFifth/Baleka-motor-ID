@@ -3,3 +3,8 @@
 /StepTests/BalekaStepTest_sg_rtw
 *.mldatx
 /StepTests/slprj
+/StepTests/BalekaTorqueRamp_sg_rtw
+*.autosave
+Data/StepTestsRound2V1.mat
+Data/TorqueRampsV1.mat
+Data/StepTestsRound1V1.mat

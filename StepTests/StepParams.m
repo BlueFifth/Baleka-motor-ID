@@ -17,7 +17,7 @@ M_Back_right = 2;
 M_BR_torque = 1.2185;
 %%
 %[text] ## Step Params
-I = 1; % For ease of swapping tests
+I = 15; % For ease of swapping tests
 % Big array for portability
 % QstepSize
 % wStart
