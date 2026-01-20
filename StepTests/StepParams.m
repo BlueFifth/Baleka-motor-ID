@@ -4,17 +4,17 @@ clc;
 %%
 %[text] ## Motor IDs:
 % Update these!
-M_Front_left = 2;
-M_FL_torque = 1;
+M_Front_left = 6;
+M_FL_torque = 1.1986;
 
-M_Front_right = 3;
-M_FR_torque = 1;
+M_Front_right = 5;
+M_FR_torque = 1.2249;
 
-M_Back_left = 6;
-M_BL_torque = 1;
+M_Back_left = 3;
+M_BL_torque = 1.2189;
 
-M_Back_right = 5;
-M_BR_torque = 1;
+M_Back_right = 2;
+M_BR_torque = 1.2185;
 %%
 %[text] ## Step Params
 I = 1; % For ease of swapping tests

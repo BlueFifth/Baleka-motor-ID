@@ -1,2 +1,5 @@
 /slprj
 *.slxc
+/StepTests/BalekaStepTest_sg_rtw
+*.mldatx
+/StepTests/slprj
