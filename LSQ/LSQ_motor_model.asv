@@ -1,0 +1,377 @@
+clear;
+clc;
+% Initial guesses 
+% hold off
+% Solve 1:
+%%
+
+
+
+
+% Big array for portability
+% QstepSize
+% wStart
+% wStepSize
+% Kp
+% Kd
+% Test number:  1  2  3  4  5  6  7  8  9 10 11  12  13  14  15    
+Tests = [       3, 5, 1,-1,-4,-1, 6, 3,-2, 2, 0,  0,  0,  0,  0;
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,  1,  5, -5, -2;
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0,30,-20, 20, 15,-30;
+                1, 1, 1, 5, 5, 5, 5, 2, 2, 3, 0,  0,  0,  0,  0;
+                0, 0, 0, 0, 1, 1, 1, 0, 1, 0, 1,  1,  1,  1,  2];
+index = 1;
+qStepSize = Tests(1, index);
+wStart = Tests(1, index);
+wStepSize = Tests(1, index);
+Kp = Tests(1, index);
+Kd = Tests(1, index);
+StepTime = Tests(1, index);
+% wants initial vals here too
+J = 1; % scaled by 100
+b = 01; %scaled by 10 for unity solving 
+%%
+% [J, b, Bt, Ct] = AK10lsqPos
+[J, b] = AK10lsqPosJb %[output:11d56387] %[output:4139e40a] %[output:5c5b65f0] %[output:7c46cee9]
+%%
+function [J, b, Bt, Ct] = AK10lsqPos
+
+%% LSQ for inertia (J), damping (b) , Breakaway torque (Bt), and coloumb friction torque (Ct)
+
+
+% Data trimming for lsq:
+TestsData1 = load("Data/StepTestsRound1V1.mat");
+TestsData2 = load("Data/StepTestsRound2V1.mat");
+% Start with oscillatory first for best odds at global minima
+% So reduce sample
+
+% Lets use 1:7 for steps, 11:14 for validation
+% Which motor? 
+% Start with back left
+MotorNum = 10; % Back left
+% Position tests start at 5s
+% End varies on tests. For solver time reasons cal it at 10.5 (a bit longer
+% than longest test) - might need to adjust
+SimTimePos = 2.5;
+stepsq = [];
+
+for i = 1:2
+    temp = timeseries2timetable(TestsData1.data{i}{MotorNum}.Values.q);
+    temp = temp.q(5001:5001 + SimTimePos*1000);
+    stepsq = [stepsq; temp];
+    temp = timeseries2timetable(TestsData2.data{i}{MotorNum}.Values.q);
+    temp = temp.q(5001:5001 + SimTimePos*1000);
+    stepsq = [stepsq; temp];
+end
+
+mdl = 'LSQ\AK109_LSQ';
+open_system(mdl) %Load the model
+in = Simulink.SimulationInput(mdl); % Create simulation input object
+in = in.setModelParameter("StopTime",num2str(SimTimePos));
+in = in.setVariable('StepTime', 0, 'Workspace',mdl);
+
+% Starting guess: From Sys ID toolbox
+J = 2.10; % scaled by 100
+b = 0.933; %scaled by 10 for unity solving 
+Bt = 0.0; % Breakaway friction torque
+Ct = 0.0; % Coulomb torque
+
+
+pid0 = [J, b, Bt, Ct];
+
+options = optimoptions(@lsqnonlin,'Algorithm','levenberg-marquardt',...
+   'Display','iter-detailed');
+% Optimize the gains
+% Make Ct < Bt
+% Ct -Bt <0
+% A = [-1 1];
+A = [0 0 -1 1];
+b = 0;
+Aeq = [];
+Beq = [];
+pid = lsqnonlin(@tracklsq,pid0,[0.1, 0.1, 0.00001, 0.00001, .000001, .000001],[50, 50, 50, 10000, 50, 50],A, b, Aeq, Beq, @nlcon, options);
+% pid = lsqnonlin(@tracklsq,pid0,[0.01, 0.001],[1, 0.5],A, b, Aeq, Beq, @nlcon, options);
+% pid = lsqnonlin(@tracklsq,pid0,[1.0, 0.5, 0.01],[1.7, 1, 0.5], options);
+% set_param(mdl,'FastRestart','on');
+% Return the gains
+J = pid(1); b = pid(2); Bt = pid(3); Ct = pid(4);
+    function F = tracklsq(pid)
+      persistent startplot
+       if isempty(startplot)
+          figure
+          plot(stepsq, 'r', 'DisplayName', 'Reference Step')
+          legend(AutoUpdate="off")
+          title("Attempts at solving")
+          hold on
+          startplot = true;
+      end
+      % Track the output of optsim to a signal of 1
+      % Set the simulation input object parameters
+      % in = in.setVariable('Ip',pid(1),'Workspace',mdl);
+      % in = in.setVariable('Ii',pid(2),'Workspace',mdl);
+      in = in.setVariable('J',pid(1),'Workspace',mdl);
+      in = in.setVariable('b', pid(2), 'Workspace', mdl);
+      in = in.setVariable('Bt',pid(3),'Workspace',mdl);
+      in = in.setVariable('Ct', pid(4), 'Workspace', mdl);
+% Big array for portability
+% QstepSize
+% wStart
+% wStepSize
+% Kp
+% Kd
+% Test number:  1  2  3  4  5  6  7  8  9 10 11  12  13  14  15    
+Tests = [       3, 5, 1,-1,-4,-1, 6, 3,-2, 2, 0,  0,  0,  0,  0;
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,  1,  5, -5, -2;
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0,30,-20, 20, 15,-30;
+                1, 1, 1, 5, 5, 5, 5, 2, 2, 3, 0,  0,  0,  0,  0;
+                0, 0, 0, 0, 1, 1, 1, 0, 1, 0, 1,  1,  1,  1,  2];
+      simdata = [];
+      for i=1:2
+          in = in.setVariable('qStepSize', Tests(1, i));% , 'Workspace', mdl);
+          in = in.setVariable('wStart', Tests(2,i));%;;%'Workspace', mdl);
+          in = in.setVariable('wStepSize', Tests(3,i));%,;% 'Workspace', mdl);
+          in = in.setVariable('Kp', Tests(4,i));%,;'Workspace', mdl);
+          in = in.setVariable('Kd', Tests(5,i));% ;%'Workspace', mdl);
+          out = sim(in);
+          simdata =[simdata; out.yout{1}.Values.Data; out.yout{1}.Values.Data] ;
+      end
+
+      F = simdata - stepsq;
+      plot(simdata, ':')
+    end
+
+    function [c, ceq] = nlcon(x)
+        ceq = [];
+        c = [];
+    end
+end
+
+%%
+function [J, b] = AK10lsqPosJb
+
+%% LSQ for inertia (J), damping (b)
+
+
+% Data trimming for lsq:
+TestsData1 = load("Data/StepTestsRound1V1.mat");
+TestsData2 = load("Data/StepTestsRound2V1.mat");
+% Start with oscillatory first for best odds at global minima
+% So reduce sample
+
+% Lets use 1:7 for steps, 11:14 for validation
+% Which motor? 
+% Start with back left
+MotorNum = 10; % Back left
+% Position tests start at 5s
+% End varies on tests. For solver time reasons cal it at 10.5 (a bit longer
+% than longest test) - might need to adjust
+SimTimePos = 2.5;
+stepsq = [];
+
+for i = 1:2
+    temp = timeseries2timetable(TestsData1.data{i}{MotorNum}.Values.q);
+    temp = temp.q(5001:5001 + SimTimePos*1000);
+    stepsq = [stepsq; temp];
+    temp = timeseries2timetable(TestsData2.data{i}{MotorNum}.Values.q);
+    temp = temp.q(5001:5001 + SimTimePos*1000);
+    stepsq = [stepsq; temp];
+end
+
+mdl = 'LSQ\AK109_LSQ_simpFric';
+open_system(mdl) %Load the model
+in = Simulink.SimulationInput(mdl); % Create simulation input object
+in = in.setModelParameter("StopTime",num2str(SimTimePos));
+in = in.setVariable('StepTime', 0, 'Workspace',mdl);
+
+% Starting guess: From Sys ID toolbox
+J = 2.10; % scaled by 100
+b = 0.933; %scaled by 10 for unity solving 
+
+
+pid0 = [J, b];
+
+options = optimoptions(@lsqnonlin,'Algorithm','levenberg-marquardt',...
+   'Display','iter-detailed', 'StepTolerance',0.001,'OptimalityTolerance',0.001);
+% Optimize the gains
+
+
+
+% set_param(mdl,'FastRestart','on');
+% Return the gains
+% 
+% pid = lsqnonlin(@JBlsq,pid0,[],[], options);
+pid = lsqnonlin(@JBlsq,pid0,[0.01, 0.01],[10, 10], options);
+J = pid(1);
+b = pid(2);
+    function F = JBlsq(pid)
+      persistent startplot
+       if isempty(startplot)
+          figure
+          plot(stepsq, 'r', 'DisplayName', 'Reference Step')
+          legend(AutoUpdate="off")
+          title("Attempts at solving")
+          hold on
+          startplot = true;
+       end
+      in = in.setVariable('J',pid(1),'Workspace',mdl);
+      in = in.setVariable('b', pid(2), 'Workspace', mdl);
+
+% Big array for portability
+% QstepSize
+% wStart
+% wStepSize
+% Kp
+% Kd
+% Test number:  1  2  3  4  5  6  7  8  9 10 11  12  13  14  15    
+Tests = [       3, 5, 1,-1,-4,-1, 6, 3,-2, 2, 0,  0,  0,  0,  0;
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,  1,  5, -5, -2;
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0,30,-20, 20, 15,-30;
+                1, 1, 1, 5, 5, 5, 5, 2, 2, 3, 0,  0,  0,  0,  0;
+                0, 0, 0, 0, 1, 1, 1, 0, 1, 0, 1,  1,  1,  1,  2];
+      simdata = [];
+          in = in.setVariable('qStepSize', Tests(1, 1), 'Workspace', mdl);
+          in = in.setVariable('wStart', Tests(2,1),'Workspace', mdl);
+          in = in.setVariable('wStepSize', Tests(3,1), 'Workspace', mdl);
+          in = in.setVariable('Kp', Tests(4,1),'Workspace', mdl);
+          in = in.setVariable('Kd', Tests(5,1),'Workspace', mdl);
+          out = sim(in);
+
+          simdata =[simdata; out.yout{1}.Values.Data; out.yout{1}.Values.Data] ;
+          in = in.setVariable('qStepSize', Tests(1, 2), 'Workspace', mdl);
+          in = in.setVariable('wStart', Tests(2,2),'Workspace', mdl);
+          in = in.setVariable('wStepSize', Tests(3,2), 'Workspace', mdl);
+          in = in.setVariable('Kp', Tests(4,2),'Workspace', mdl);
+          in = in.setVariable('Kd', Tests(5,2),'Workspace', mdl);
+          out = sim(in);
+          simdata =[simdata; out.yout{1}.Values.Data; out.yout{1}.Values.Data] ;
+          
+
+      F = simdata - stepsq;
+      plot(simdata, ':')
+    end
+end
+%%
+
+function [Ct] = AK10lsqVel
+
+SimTime = 1.5;
+% Get comparison data
+data = cell(1,9);
+load("VelocitySteps.mat");
+steps = cell(1, 9);
+for i=1:9
+    steps{i} = timeseries2timetable(data{i}{4}.Values);
+    steps{i} = steps{i}.M1_vel(4501:4501 + SimTime*1000);
+end
+stepq = [steps{3}; steps{4};steps{5};steps{6}; steps{9}];
+
+mdl = 'AK109_LSQ';
+open_system(mdl) %Load the model
+in = Simulink.SimulationInput(mdl); % Create simulation input object
+in = in.setModelParameter("StopTime",num2str(SimTime));
+in = in.setVariable('StepTime', 0.5, 'Workspace',mdl);
+in = in.setVariable('q', 0, 'Workspace', mdl);
+in = in.setVariable('Kp', 0, 'Workspace', mdl);
+
+
+J = 1.59;
+b = 1.49;
+Bt = 0.7; % Breakaway friction torque
+Ct = 0.144; % Coulomb torque
+pid0 = [Ct];
+
+options = optimoptions(@lsqnonlin,'Algorithm','levenberg-marquardt',...
+   'Display','iter-detailed');
+% Optimize the gains
+% set_param(mdl,'FastRestart','off');           % Fast restart
+% Make Ct < Bt
+% Ct -Bt <0
+% A = [0 0 0 0 -1 1];
+% A = [0 0 -1 1];
+% b = 0;
+% Aeq = [];
+% Beq = [];
+% pid = lsqnonlin(@tracklsq,pid0,[0.1, 0.1, 0.00001, 0.00001, .000001, .000001],[50, 50, 50, 10000, 50, 50],A, b, Aeq, Beq, @nlcon, options);
+% pid = lsqnonlin(@tracklsq,pid0,[0.00001, 0.00001, .000001, .000001],[50, 10000, 5, 5],A, b, Aeq, Beq, @nlcon, options);
+pid = lsqnonlin(@tracklsq,pid0,[0.001],[0.7], options);
+set_param(mdl,'FastRestart','off');
+% Return the gains
+% J = pid(1); b = pid(2); Bt = pid(3); Ct = pid(4);
+Ct = pid(1);
+    function F = tracklsq(pid)
+      persistent startplot
+       if isempty(startplot)
+          figure
+          plot(stepq, 'r', 'DisplayName', 'Reference Step')
+          legend(AutoUpdate="off")
+          title("Attempts at solving")
+          hold on
+          startplot = true;
+      end
+      % Track the output of optsim to a signal of 1
+      % Set the simulation input object parameters
+      in = in.setVariable('Ct', pid(1), 'Workspace', mdl);
+
+      
+      % Step 1
+      in = in.setVariable('StartVel', 1, 'Workspace', mdl);
+      in = in.setVariable('StepVel', 30, 'Workspace', mdl);
+      in = in.setVariable('Kd', 1, 'Workspace', mdl);
+      out = sim(in);
+      simdata = out.yout{1}.Values.Data;
+      
+      % Step 2
+      in = in.setVariable('StartVel', 1, 'Workspace', mdl);
+      in = in.setVariable('StepVel', -20, 'Workspace', mdl);
+      in = in.setVariable('Kd', 1, 'Workspace', mdl);
+      out = sim(in);
+      simdata = [simdata; out.yout{1}.Values.Data];
+
+      % Step 3
+      in = in.setVariable('StartVel', 5, 'Workspace', mdl);
+      in = in.setVariable('StepVel', 20, 'Workspace', mdl);
+      in = in.setVariable('Kd', 1, 'Workspace', mdl);
+      out = sim(in);
+      simdata = [simdata; out.yout{1}.Values.Data];
+
+      % Step 4
+      in = in.setVariable('StartVel', -5, 'Workspace', mdl);
+      in = in.setVariable('StepVel', 15, 'Workspace', mdl);
+      in = in.setVariable('Kd', 1, 'Workspace', mdl);
+      out = sim(in);
+      simdata = [simdata; out.yout{1}.Values.Data];
+
+      % Step 5
+      in = in.setVariable('StartVel', -2, 'Workspace', mdl);
+      in = in.setVariable('StepVel', -30, 'Workspace', mdl);
+      in = in.setVariable('Kd', 5, 'Workspace', mdl);
+      out = sim(in);
+      simdata = [simdata; out.yout{1}.Values.Data];
+
+      F = simdata - stepq;
+      plot(simdata, ':')
+    end
+
+    function [c, ceq] = nlcon(x)
+        ceq = [];
+        c = [];
+    end
+end
+
+%[appendix]{"version":"1.0"}
+%---
+%[metadata:view]
+%   data: {"layout":"onright","rightPanelPercent":41.5}
+%---
+%[output:11d56387]
+%   data: {"dataType":"image","outputData":{"dataUri":"data:image\/png;base64,iVBORw0KGgoAAAANSUhEUgAAAZ8AAAD6CAYAAAB+rErJAAAAAXNSR0IArs4c6QAAIABJREFUeF7tfQ+wVkeVZ0sSUswQyiEElvwxonHjTJzJoENwkxSSqDOaVRRMobKzAyuwJovEdQrDbJZNDEtlisiUW75QSSZhh6yzRFk22bCKo64ThzWOkCFuNFlFKRlDgCVqygVcKgHizrl6vvTr13\/O6dt97+37na\/qFbz33dt9+tfd59fn9OnTr5g8efIvlHwEAUFAEBAEBIEGEXiFkE+DaEtVgoAgIAgIAhUCQj4yEAQBQUAQEAQaR0DIp3HIh6\/ChQsXqhUrVqjx48ervXv3qiVLlowBYeXKlepNb3rT4LsZM2aoO+64Qz388MNq69atrYG2fv36qu7Vq1dnkSFn+bNnz1br1q2r5F6zZo3atWuXtw3YTz\/5yU\/UqlWr1P79+7O0WQoVBMTykTHQCAKgYOfMmVPVdfz48TGKEIhn0aJFA2IC4tmwYYOaMmWK2rhxY2vkg3Lv3LkzC\/nkLp9LPo0MBqlEEPgVAmL5yFDIioCuAI8eParOP\/98tWXLFjUyMlLVi8SDQvz85z9XL7zwgpo8efJALlT+ugUFX+qksHnzZnXppZeqxx9\/XF1++eWjrCz87sUXXxyQmb7Kh7+\/+tWvrurDMnXChL8fOnSosgbe9a53VUSJH\/y7zUpAEoU24ydUvlmOKYdpOZqY6N+b5HPjjTcqkEkndMQG+uTIkSOVhYqWzw033FAtGp588kn12te+Vk2cOFHpGEKbsA74DrDYvXu3eu973zuqb7IOMCm8WASEfIrtujIE162aPXv2jLJwOOQD76LrTm85EhkqUROV559\/fhSRIVnMmjXLWh68D2VeeOGFA2sNyefLX\/5yJT+4D\/WPy5VokwmVN7gY0RrUyU0nH5OYTQIzicckxKlTp45yu11xxRWV\/EiAJjldfPHFVvIxMUUM4e9goerkinjnshbLGPUiJQUBIR8KSvJMNAL6yhpWxbY9CIrbDS0AJBtUnGBNgUVy2223VZYPEgE+j24+VKyg\/GH\/A3+HhqElgO+YZZiWFxCEbd8qBJKOBVh+Ibcb4uJS5Fgefq9bWoCTiTfIB\/gjZmjFYXvNPR+0fEzCRgyRzBDj5557bkBGQj6h0SDfC\/nIGMiGgG3PwVTAuvWDStC25+OybFDxgUsJyAfJySQ01ypfJxKT0FD52pS7aYX4QDRdZyhjiHx0lxaWb5Iv\/F0PJtAJ66GHHhpD9oAjut6uu+66UW44F\/mY7Z80aVJV54IFCyrrTSeaEGFmG2xScHEICPkU12XlCOxyG5luJorl4yIfdGOBIo0hHz2yK0Q+iLxJCq59H5NouZYP1mfb17n99tsrKwOJACPZQuSD3+M+DlpBQMJCPuXMrT5IKuTTh17sYBtsm+26mPrGNYV8TLeb2WRTsVMtH47bzazTF5VnWlq6S4pq+Zj12QIIgHCpbjcgKJM4dauFSz7iduvgxCtIJCGfgjqrJFFRkeH+gH7GxNyr0C0keP7BBx9Ub3\/72wcb2eCO27FjhzVAAF11seRjBg8AxiY5wN\/AvQeRdNdcc82YbrBZPjaXmek6C4Wgm+46fN\/cozHbgPKYAQfYB1iuGbnGJR+dUFE2CTgoaZa2K6uQT7v497Z2c\/NebyiSjS1qChXitGnTBiHNLmWrK\/1Y8gG3my3UGuTVCQT3lnC1j+2xnVvC73RSBVm\/8IUvqMWLF1eHNyFgwVa+eRDUFfKNUXGcUGss23WYlEs+piUF\/YQRjRJw0NupnaxhnSUfmAgwUdeuXTs4mU2ZrMmQkYJ6jYCc5q\/fvYihzXUp5FMf376X0EnycblsYHULH1g16v\/veydJ+9IjIORTH1OXa9F059WvSUroIwKdIx\/dXXPBBRcMwkhxoG\/fvr06HW+zjPrYQdKmPAgI+aTB1XbQVc9gkaYWKaWPCHSOfD70oQ+pRx99tEpjMm\/evAH5wCBfvny5uu+++6pcX+bvfewcaZMgIAgIAn1FoHPko2\/WmuSj7wGBJXTrrbeqBx54oLXEk30dFNIuQUAQEARyI9Bb8pk+fXpu7KR8QUAQEAQ6i8Dhw4c7KxsIVhT5UN1uQDyQ\/uONb3xjp8EX4QQBQUAQyIXAE088UaVX6ioJFUM+ppvNF3AApAPJIrsMPHfAzZw5Uy1btqxXbQIM+tiuPrapr33V13bhGIT8e0I+TG0LB\/T0PR94nRpqjeTTZeCZcFRWHBBqn9oEGPSxXX1sU1\/7qq\/tKmEMFmP5wCChHjItAXgu+YArEZJnbtq0iftqp5\/vY7v62CYYRNKuTk+lUcKVoAM7Sz51urkE4Ou0T94VBAQBQcCHQAk6UMhHxrAgIAgIAj1DQMinpQ4tAfiWoJFqBQFBYAgQKEEHiuUzBANRmigICALDhYCQT0v9XQLwLUEj1RaKgByaLrTjEotNDZsuQQeK5ZN4cEhxgkBqBOTQdGpEyy2PenBUyKelPi4B+JagkWoLRKCPh6YL7IbWReYcHC1BB4rl0\/qQEgEEAT8CJSgS6cP8CHDGAefZ\/JLbaxDyaQt5qVcQICJQgiLxNcV25w88T7n3x3ZbKhG2Rh8zrzvXb3KFzCxHjhxRq1evriUTZxxwnq0lVI2XhXxqgCevCgJNIFCCIgmRj54UGJ4FZX3JJZeoVatWqf379ztfh+emTZtW3V7c1Y\/trrEVK1aobdu2qc9\/\/vNqw4YNat++fUI+RgcK+XR1RItcgsCvEOgj+ZiJgXXr6Pjx41VW+iuuuEItWrSoQgEtCbAiLr300lF\/gzyQ73jHO6q\/\/fjHP66ISrdE9u7dW\/0NkxMfPXpUvfrVr1b6dd96\/YcOHRqQok2uXbt2jRqbtjyU+ADKgXX96Ec\/qpIDT5w4cVT9UMbcuXOrv4FsugxYFmcccJ5ta6IJ+bSFvNQrCBARKEGR1LF8pk6dOupiSN3acf1fz3IPltH1119fJd6FW45RkYNVBR+wPL72ta+p3bt3V4ofIsbABYaJim+\/\/fZR1gm6yR566CGnXGZ7dVLU3YkzZswYlH3PPfcMZBkZGRklJ9zcDEQL77qsJc444DxLHIbJHxPySQ6pFCgIpEXAVCSveumltBUkLu2ZceNGlWjb83FZHfgiWj+QxR3dbrqCx+fAInr22WdHZcA391\/gWbB+7r777op8tm\/frkD5I7HB3223ItvkRrlM6wflMfeoHn\/88QH5AJmh1YPPIw7QRrB80A1pczdyCIXzbOLuJxcn5EOGSh4UBNpBwFQkN584oVafONGOMIRa10+YoO6cMGHwpLknYu73+O7m0pWwa+PedHu59okwKz6HfBYvXqzWrl2rXGTjggNlRWsH9nxMS0p\/V7fWYA9MyIcw0Lr4SAms30XcRKZuImCzfC46fbqbwiqlDpxxhtKtH5N8QHD9bi4kBXSH6eR0ww03DCwf+DtgAftB8EErBv6v3\/0FihzdcDbLwyQfm9sNykRLySaXHiShy4UkBe3bs2fPKBcaEtGxY8eqPSidNGF\/yyazHiHH0WucZ9saSGL5tIW81CsIEBEoQZH4mmIjHyScgwcPVorYtbFvWgCugAPz4klXwIHN7YbBCOgS011rlIADJFMMhIDfzVBr2PuBPSlfwAGQD7jhIBhBAg6Ik6Nrj5U+WbuGp8jTLgIyntvFv4nafRFzWD9nHHCebaJ9tjrE8mkLealXECAiUIIiITZFHnMgIOTTk6Ehk7UnHSnNqBCQ8SwDgTsOShgzYvnIuBYEOo4AKhI4NU9Nqd\/xJol4EQhAdnPYN4Lw89A4EPKJADjFKyUAn6KdUsZwICBXKgxHP1NaCZF3sAgJfUrQgWL5hHpRvhcEOoAAEJBcKNeBjmhZBLB4QlYP10XXVpOEfNpCXuoVBAQBQSATAmL5ZAI2VGwJwIfaIN8LAoKAIBCLQAk6UCyf2N6V9wQBQUAQ6CgCQj4tdUwJwLcEjVQrCAgCQ4BACTpQLJ8hGIjSREFAEBguBIR8WurvEoBvCRqpVhAQBIYAgRJ0oFg+QzAQpYl8BK46ebK6tgCuB3jsrLP4BfTojQ++8IKCnwfPPrv6kU\/3ERDyaamPSgC+JWikWiICeGcOKNuP\/PqvE9\/q52N3\/fznFfnA59zJk\/vZyJ61qgQdKJZPzwadNKc+AnBT6CNHj1YWDyjdYVe4P33++criAWtw5itfWR9gKSE7AkI+iSHGO0Dgvgv46Hel61WVAHxiaKS4hAgA+XzrZz+rXG5APu+ZNGnU5WgJq+p8UUjEYP1tP3assgLF9db5bisiGW0xlg9cxrRhwwYF19HC7X76bYVbt24dNRqEfLo\/ObosIazwQdGCxQOr\/mFWuIjFvHPOUeB+A+LRr8jucj8Os2wl6MBiyMe8f938XSyfYZ5qadsO+z1Xnzyp5k2aVFlAw6xwwfID0gEiBizAFTnse2BpR1ue0oR8EuJqs3zMq3OxuhKATwiNFJUYASAfULqwvzHsClfHAkjoVadPV6Qsn24jUIIOLMbywa7GO9xtd5yb5IP3n1CywHZ7KIl0TSKw\/ejRqjpQsqBw4TOsq32dcHQiarI\/pC46Apj5nHP3D730tE8WQz7oZoP7LGDPZ+HChWr58uXqvvvuU649H4Tq\/vvvV5s2bUqLnJTWWwSAfJ4544yKcED5DnOUl07EYA0CAUnEW3eH\/tKlS9WyZcsGAlIunmurNcWQj+2Oc7CC4LNkyZJR+KHJuW7duuruC+odGG11gtTbLQT0fR49+KBbUjYjjU7EuP8D5PPMuHHNCCC1sBDAe59mzpxZkZCQDws++8Mx5NNl4BNAIkVkQgDIByK6INBA33DPVF2ni7URsZBPp7usEk72fBL2kc3tBns627ZtUyMjI1bLR8gnYQcMSVF4xgdCiyGyCy2fYVW4eqi5ic2QDIkimynkk7jbYJ8HCGf8+PFVyXLINDHAUpwyFewwK1xb24f93FMpU0TIp6WeKgH4lqCRagMI2CydYVW4NvIZ9nNPpUygEnRgMQEHnE4vAXhOe+TZ5hAQ8nkZaxsWQj7NjcU6NZWgA4V86vSwvNs7BGwBBsOqcG3ko0e\/9a7ze9QgIZ+WOrME4FuCRqoNIGA7SJkqywG4seBTSpiyjYhTHbrFO4LkvqQ8U7IEHSiWT56+l1ILRcB2kDLVah+VeSmJSm1EnCrFDmB60UsvVQEew35lRY6pIuSTA1VCmSUAT2iGPNICAjblmmq1jyRWyh1BNvJJkWIHr2k4MG6cuurUqSpjQinWYAtDMqrKEnSgWD5RXSsv9RWBXOSjR45BHWD9dP16bhvRpDh0i+QD9yTddfy4XM+dYTIJ+WQAlVJkCcBT2iHPNI+AzcpJsdrXN+\/hllTMoNB8C+k12og4BfkAFlC2ZA2n9wX3yRJ0oFg+3F6V53uNgG1\/J0VCTf2OIFC84Gbq+qVselJR7PQU+d10Mtdx6fXAarhxQj4NA47VlQB8S9BItQEEbGHVKVb75r04JWTKthFxinRDukWVAlsZ1GMRKEEHiuUjI1cQ0BDwkU+djXHzagK8HbTL4IPMXz\/rrFEWWop0QzqppSCzLmPYlmxCPi0hXwLwLUEj1QYQsKXSSaEgdUWeorwmOtJ1uBYwwsSrMXLo5SKZ1SH2GBn6\/k4JOlAsn76PQmkfGQFUhOY5nBSrfVDYcKAS9nlSlEduVI0HdZn1YurmujPfr1tejSb29lUhn5a6tgTgW4JGqvUg4CKFumRRanZoFynUIQtJVtrMFCxBB4rl08xYkFoKQMBHMikUru5a6nq+OB8WdWTHMz76OadU6YsKGGKNiSjk0xjUoysqAfiWoJFqPQj49mLqkE+JCTpD5AMHZIFAuB8bFqkySHBl6fPzJehAsXz6PAKlbSwEfORTZ7WP5eo5zLqucH3kUyfXnStZ6atOn1bzJk1i9Zc87EZAyKel0VEC8C1BI9USLB9boss65JMzQWeuDvURcR3izJUvLhcOpZZbgg4Uy6fU0SVyJ0fAd+CxzmrflSMN\/g77QF38hMgn1lIpEYsu9k9IJiGfEEKZvi8B+ExNl2JrIODL4VaHfHLlSKvR1OCrPiKuc62CDws56xPsFvIDJehAsXzI3SkP9h0BH\/nUcTXZcqR1\/aCpj3zq5GMrEYsSx72QT0u9VgLwLUEj1XoQCJFPrKvJZjXVPTuUuyN9WMB3q0+ciLoELicWmC27hIzhufuvBB0olk\/uUSDlF4OAz51U51oFX5qaureaAolddPp08ruBfO2tkww0FxZ4fggGG1xS95GJE4f6gjohn5bUTgnAtwSNVOtBIBf55EpTA00BmWHFDwo3ZaiyD4s65OM6LwWkVMdiKfGyvpyTsQQdKJZPzhEgZReFgG0\/AhuQS+E+ePbZ0ff64GoflDZezpbqOmof+dTZr\/KRTx0szCsroN9iDsEWNWA9wgr5tNSTJQDfEjRSrQcBX0RbLPnkyhQAzdA3\/sFySHk1tw+LWPLxYVEnoMPEIrav+jQ5StCBYvn0acRJW2ohYLu\/xrR8uOHAuTIFoMsNgyBA4cIHrIcUHx8ZxAZL5CQfve8AC\/gZ5n0fIZ8UsyCijBKAj2iWvJIZAV8Wg9jVfq7DmgCFLm+Kq751eH2WTyz55MIC5AEr8LEzzxyQb907hzIPtezFl6ADxfLJPgykglIQyEk+tpQ9dSLoTAKIJUdX34TSCcUkWrXluMP6U2KBxByb\/LSU8eqTU8inpV4sAfiWoJFqPQj4FGrsaj90WDP2vAwqcv1G0boRYzo0OcjHh0Udy00yZY8d1CXowKIsnxkzZqgNGzao888\/v0J7586davXq1WOQLwF4YYHuIRBazce4ckLnZWLzu9msiJT34oTIJ4boQljAPpPNQgyNFElWKuQTGiO1v9+8ebM655xz1KpVq9TUqVPVunXr1Pbt29XIyMiosoV8akM9dAVQLJsQOdlA863o8bv3TJrEPhDpypQNodYQel33E2priJxs9VPIhxvQAfW4kpXGklld7Lrwfgk6sBjLZ\/bs2erWW29VDzzwgNq6dau3f0sAvgsDVGR4GYFc5JPrvAwoXJBZP8tSx3VljoUc5JMLC8kXJ5ZPVl22cuVKNW\/ePLVmzRq1a9cuIZ+saA9f4RTyiVnt+xQupU5XT9gUbiryocgVk+U7FxausPAQgfZ5lJewAC\/G8gHymTt3rjp48KCaNWuW7Pn0eea00DZKtFgM+YSUdKyCtMlCaQMF2lzk0yQW0M6YfSkKPiU8I+STsJeAfBYtWjQIMli4cKFasWKF2rZtm3PPB74\/fPhw9SMfQcCHAEVxx2zoh07ux5KP673Y8nRsKOQTapcN6xzko6cYMg\/YxvRX6bNk+vTpVRPg340bN6oFCxZ0Vv8VZfmYbjcIQIDPkiVLRo0ZZH384\/333682bdpU+rgS+TMi4DuDgtWGlKdNvJC1FPreVmYoZU+dHGlQH4WIYy6UC1kiqbGIIciMQ6yRopcuXaqWLVs2qEvIJwHsYOksXrxYrV27drDnA+Rz5MiRMeHWSD4QDYeWj1g\/CTqhx0VQ8oHFKLOQQg0pZC75xBCkWQeVfOA5zjXgFCy4xJnr4GqpQx0sHviZOXNmRUJCPgl6Es\/47Nu3ryIbIKPly5er++67b0z0Wwn+zgSQSBEJEaCSD\/dCuZAbLIYsfAo3hiBNGClYxGQkaBoLSjsSDqFOFVWCDizG7QY9ax4y3bJly5j9HniuBOA7NVJFGOtZERMWrqsp195J6JZRULociySWfDjZGRAL3+V5McSZ6+xQ6VOiBB1YFPlQB0QJwFPbIs81gwBlJU95RpeWSj5ca4qicGMyBaDslJBtrlXRBhaUOpsZXc3XUoIOFPJpflxIjR1EgEIslGe45MMtE8rPdVgTZafIlIt8uPtIIWs0JiVSB4cnWyQhHzZkaV4oAfg0LZVSUiEQUmJQD1fhUjbuKYrebKPvxlV4NrS3EsKMIhNiQU2H0xYWvjuaQjiU\/H0JOnDoLR+YFAfOOIOdW6vkgSmyj0WgLfLhEhpIHlKodcmHggWFTHSUKc\/nwGIYz\/oA7kI+LWk5KvA42CEZY50N2paambRa8I\/fdfx4Vea8SZOSll1CYSFrIsbyoShTyjMmfpSQ5Tp32eQgH0o7Kc9wsYgJYihhvIZkpOrAUDk5vx9qywcUzkUvvVThC1E4MGGH9QNYXHXqVHUb5DBeP0wJeaas3vXxQ9m455aZK2pMl5tCPtzNfAqxYJlUVx7FxQht4e4j9UEHCPm01ItU4ME9sX7CBHX1yZPVv8NMPjBJwQIEJQEp+c1UJS11ZWPV5iAf2DuBseWzJEExAvbUaxUoSr\/uap+CBSp+\/TI7X2dR9pFiidgnA4X0GhtkDVZE1YENijSmqqG1fDAnFFg8H3zxxYH102ZntFW3rtDA+jFT9bclV5P1hlxZIAtF8esyUxQut0zbDaYmTlAv5wyO+T6HfHzndnJjQcFOyEdyuzWpR0ibbfopcYqSaLQBDVemKzQgn7qHFBsWP0l1ucgnZPlQXEd6AynWQV2FGwpoQHk4gQ0UV14OLCh4JRlAHStELJ+WOoQCvE443LDRlpqVrVqdiOsqrmxCZi4YXbChW0DbVrg59pFMaClEDO9Qn4Nnc5APdaxy+izzMGuseIoObEwYR0VD63bTJ0PMRmfbHZeyfn1vAt2R1D2IlHK0WRZVQVGfg7ZQ3VccJU610uscrqTKQ32uC1hQ3YNtjsGUdQv5pESTURYFeDO0ts5kZYjWyUfNVWlMpuVONowhFJVUOOMkB\/lwLAhqMIAJExULzhmaHFhQiZhDkowh0+lHKTqw7QYMreVj+rWHUeHi4DOJeNgmK2XjGrHiYEN9lqqY0YKAf0Nnsah12xQQlXw4clPl4ZRJJWJOmW0r5FT1C\/mkQpJZDgV4czIM4wDVyefrZ51VhVhzXCTMbuns422TDyc0mjpOqc+ZnUI5R6SPm2fOOKM6Ixf65CAfysFgkItKUqE2lPQ9RQe23Z6htHxsE4yjANrutNT1m4oB3BnDFG7NJR9q9gCqBcFRjlQlzilTH08cLDhzhhrQwZGbGpVHdc+lnldtlifk0xL6IeBtE4wz6FtqVpZqXUQ8TKfCOeG4HIuCQz5UvKnkE6twueRDvQ6CgwW1TCoW1Ki4LBOspUJDOrAlsUZVO5SWj03Z1D2Y14XOjJHBpmyGbbJyyIe62ucocSpRcFxilJBs23jhyE1NXcMpk4oFyE4ltGE8SiHkE6MNE7wTAt6mbIZN4SLMmN5Fz203bJPVdy21ORypFjJH4VLHXkyZnDxp0FYOEVOJIkbu0GV4nDI5bUqgfjpRREgHdkHIobR8bJN9GAeoS9kMGxZU5c\/ZvOZgSK2fkloHlQpHOeuKiCM31VvAkYWKBadMjpXUBaWcQgYhnxQoRpQRAt62YhvWg6a2yc6d2BFd1KlXqAoPhKau9jlKnPos9TkEl+qWspFPyPKAd6i4ceSmWt2cMoV8DndqvqEwQ2n5uBRIzGR1+c0hQ3QJn9xYlIyBTXbqXgrHlUdVpFRlj3JTN+T1dnLqoD5LbR\/H7cfBF8rlHIgtYcyGZAwtwEPvN\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\/8zJw5syIhIZ+6iCqlYK9nzpw5Y0o6dOiQet\/73jfq7z5\/Z2gFGVIstqb4Vowxq8kEcJGKoBBxTK47F8Yxip7UkBoPxcgUWu2H3JkucV39kWIMQTuBJOADB0ttBBmDRYhoQ99zFzDwfGgOh4YDBr4ACXc1\/D\/UhtD3sucTQqjG9xS3m431QwM35iR+yK\/NDeWtAQvr1VAKmJCS5RIxKo5QOhZWI2o+HKMcQzkAY3CDZuQkHygfrR74f1PkkxoLkL3ufELvxoPjx6sPvviiN59ezeHV2utCPhmhjyWf0MCNmSwh10KI8DLC5C06JFeMYg6t0kOE1zQWMW0MvRNr+bjei7FIQjj6yId6NTXUEZItZj5BuS73d2h8hdqN34MeeOzMM6uM7pDvrW8fIZ+WetQHfIh8YpKLht4JnQuhwAR1wCRJuVdCwcLcFwjJGlJGIVdfqPzU38coxxD5xLhuoV0uWVDhckghhJOtDaF22coM9XcsFq73Ql6GULv173VLkPNeCc8K+bTUSy7gKaummAkYUmAxQQw6dCgT\/C2Uyp8DeYh8MB8bJyVOyAqsiwWnfZRnQ31nKyMURBIK5HDJ1WT6l1TkE5pTseTj6pfQ+KL0+TA8I+TTUi\/XIZ\/QSs7WpNAEi9lHwnpgct91\/HjlHoAP+KjBXVD3NHZIaUBdMViEXE51sACZQG6oIwUGPmvDN3RDuMRad22TTwwRh8ZRDiK++uTJMdm4W1I1na1WyKelrnEBH1IasQo3NMHqrNbMskM5wKiQh5QGKnpwGXKsrZACi7EsTSKu+unUqYqAfZevUbAILRxsZSB2rpDx2H0t1\/gMjS9KO81nbP0Q6jtXPaGw6JisFj4iFvIJ97iQTxijLE\/UIR+KUjaFDq10Q24aHwi2vFMpclGhS01POGmTI+SaM98JKfM6WKDMoPRT+f5D8vrIx0XKoUAOV3+7xl4smfnGVVPkE4uFi4hj+iuLkul4oUI+LXWQC3jqqpurcEMTjGJxcZQctAN+PjJxYnQAAlUmLhahPR1qvTY84F09NBYwuOill9Rnzz47GodYq8KHCxczva22d0PjK2aa2eZCrGL3JYyNld1HxDGWVAxGJb8j5NNS7zVNPhRlQ3nGhMu3fxI7qbEOqiuQWw9llR6DBebgMoMfQGFCBGDsRWAhq9U1hH0KN6Z9WI\/5bowlTpl2qcnHlSWgDhY2jLnjkYJFH58R8mmpV13AU33anAFOVQ4xk9C3EqW2xdUFVCuQgwXURXk+BotQ9BNnX0rHJDX5hPaDQlPCxI86vkLlmt\/b+j\/WCnQdJfClnaLIaxsnMWOHUlffnhHyaalHu0g+FKWsw4UTF6LcXKt6mIixSpdKXlzlTFEOFOvIHDo+xRhTHpYf+67L8qlLFibeddyU3D0fbl\/rGLpcYXXGaFNE3JKaylqtkE9WeN2Fu4Cn+rQ5k5CqHDhlYstg8vkCAmJXqlA+lXxCezg2wgwRYiwWLtcO7gUBSXMP4XIXBXrfwKFfM9qOOh5co9cco9R+4k41l+UTs5+SKxtBU0TMxa6E54V8WuqluuTDUbjUvRMq8SFkemSXC8Y6io6q1DhyU1f9nDKx7aEVdOzeTyz5uAiUOh5cfWrmjQOSgLDyuiHlVLdbTLboUDaC2CzmZrlUV3FLaqdT1Qr5tNQdLuCplgJHOYZS6yAEVGXPfT42dQ+1jRy5qWQYSsxpDhuKQo+NAKS4CW3D2LVAqasgzfc5CyHOdLPJGUvEIfKJTQtkjhPOWORg0cdnhXxa6lUf+VDcClTFzHFfcZUSlSip5Gd2BbV8zoSntpFCJrq81DbGEHEd8nnV6dNjTtpz8LJND5PAYwkhNPVSko+rzdTx4JLVfJ86ZkNtH4bvhXxa6mUf+VDcClRlh+RDOXHNPVwZcjPp0Ib2hmzdQN134SgQquKlWkgoN1XpcPd+6kRjudpKxcA3NTCYAfaU4P+xbitfHbZ+jSViXzYC+C72imozchDGQV+zUKdWlUI+qREllucCnrqK5ChcqpXEUbjUvROEI8Y10yb5cNsHStEX9acPCypRwTtcOfR6XCRDHQ8h8oHgCshft\/3YMectocTpYH2sBPIBwZEQcxJxHRy7+q6QT0s94wKeqsQ45ENV4gCF72CiDhUGG1CzSXOfR1ko1wdzSJOjeDmWHedZPIwaShtUl3xcY4RDfq7pgYsJIB+oB24eTf0x5a9DxC6rnjMeXO3DBSNgAeVR+jU1ViWWJ+TTUq\/5yAcGbygjNMdFxjknQnVr4OY5R+nAShwUCDUqimoFcsiHS8Qc8uNsWoOSAgxt\/ayHY6dQuKZcHAxc0wPHHyhcips4ZpqlJJ+cediQiCGEvo4LLwajkt8R8mmp92zAcxQNR+FSlTjH2ohdMQK5wSQFAoIcaPixnX+hEiEHN47ipT4bu4eCV1HoQxDywMEH9yA4\/WwOZV8G6hSEgfjEnF2iTLuU5JMzDxviDERMCRaitH0YnhHyaamX65IPR+FSlThAQVW4sWdW8K4biMLCDyjcA+PGjXLdcDfaqW3kEDF1nyqWiG1DzySyHOTDwaCl6VFVa5JP3SzhuRKi4piu3I\/nnNPLK69zjAMhnxyoEsqsSz5opcCq0+ei45AUlBm6aA2bRlX2BCgqP7kZEsyVmyoP9TmQG+QChReKhOK4NUN4uMiH49LDOlwYcvanQvLm\/N5FPrGRdbnIBzAArGGshNzlOfEqrWwhn5Z6zAY8d5VLUaRcJU5xIXHLDEGcgnwoq3mu3NSgDuiHWIWoYzN1wkUV+b\/1Z\/sGhEeVwYVxUxmoQ30c831q8rEF01DmUIzs8k4YASGfMEZZnmiKfLiERlF2MZFrNhDXzn5Y3bprfmVhgOJdOO75wWNcuXOSj49Y6mABbb7s3CvVo89+rmo34HH1qZPqN776+6PIBwgpZH31gXyuufD9VTMQj3e+8s3q46\/9Y3XtnoXV3ylj0zdZbUlAHzl6tHPRaTAunjtxoGrKyt\/5tDpvwkXVPOnbR8inpR61Ac+dXBSFG3NSH8jAp3Ap1pEJ6\/tft0q9\/3UfV0\/99BuDiXTZ5CvV1F+7SL1h8lVjJhiXfCh7VdwyKc9zsDDJBjC655q\/Uzc8+nsVXPD9TWdMVf\/02a8OyIZTvm0om2OE0qYmpwSMC1C0OgE\/evCz1e\/mfODOD7Md5hjhWsK5cNHJBvC45sIPDMYE1AmkjPjkkqGNcoV82kD9Hzb2XeTDWeVSUrVwlRflrhfqORFYtcHKHpUrTCwgn6ef\/8Yo1G2rOy5pUoIDuGWCkCG3TAgLXbGAZQNki3jYhp7ZX9z+M8s0x0gMBimnCChSWGyMfPumgbX39POPqc\/9YMOYamzkw5kfZoHmGOkKET903RG1YMe0SlzT+kuJfdfKEvJpqUdswHMVDWW1zy2TonBdkW5o3eBEAlL562c\/O4ZsbErBDDjgrnIpEWdQJld5hQ7dmljoZAPtRNci\/B8sPZN4bRaivvKN6T+9TFPh1i2PO10AD7B4dbL58YkDg9995YEihjGE46mu7F3IQG3i0WfLJjRWhHxCCGX6PgX5UBQu5Rnbatl1uBJP52OUne4SAEWLLhMObDYZuYqG0k5umdAGn3VphoMD+V42+Sqlr+QphKNjZcpIaZcPa\/P9GAw4fQnPmgQMuNgsm1C5qckntVUZkh+\/h3YAJoiBywNALa8vzwn5tNSTNuC5iobyPMU6spGP7RIyVCzfPfjk4DyDvrKPhdLmduMqScrzFLxsVhn8zZaVAdw2f37efPX465aoJY9fX71aV7GkJh+zvJCbMLYP8T3T1VqnPNP6jek\/vX6zPMqYiZVfX3TAvt7nfvDJXu7bxOID7wn51EGvxrspyIcyeWLIx7V\/Aiu4ay74gFrxxbckTSRpIx+uoqG46WIUrw1jXNlDnW95x3fUo89+Nmplbxs+5oZzjMw+hRszHkLDXLd+ARuIzgq5F0Nlwve5yacutq42UPb2KO3v+zNCPi31sA147mSgKFxKRJxttY+HK00Xyppp71NX\/OAvkiaStBFNLvLhpj8xMdaJEsOsY8OgqeTDldlGPhi9GDMeQlMElK0raCD0ru\/71OQD\/bX6xAn1kYkTqxRPqYgY5ggQMLrVYIyApYPh0nUw6PO7Qj4t9a6LfDiKhkI+oWgtW\/P1ciESByYRRmhxSYECr61MLhFTIpdiFK95jgcUy1PPP1a5ULgyUrCwuck4Y8KsQ5cfvsN7leqcxAdFC0EEvqg9SltDz5h7PnXxNrOJx4wHl8xCOKHeHPu9kA8fM+8b69evV3PmzBk8s2XLFjUyMjLmHRvw3MkQymzNzY8GQsIqbtVr\/1gt3bnYetYnZSoZBMXmduOuSinkQ72uwuysv37TVvX1M88ac9AvtjzfADLJhzsmbGWb983UzT+Wy9IxZTcXV9wxkQsLdC2+4dwrk7lbE6uhIooT8knYTStXrlTz5s1Ta9asUbt27VLw+\/XXX682btyotm7dOqqmFOQTOpMTc4gOFAt85vyvT6g\/OvGtyj2hf3LkBXORDzfzsk82DhGbh0H\/9tQr1adPHxmVtwtX0dT7jKjDrAnyickTp59Fobal7nM28uGOCVMGffFUZyxDEMHIkzcl2duqi1Op7wv5ZOy52bNnq3Xr1qnt27ePsX5swHNdZCFyoWYBhsgccKPoKTxsslCsixg4bW63mBW\/D78QVrrcJhnawq0pwR4xWJgBBymsK8QS5Im9byY2XDoGA3zHdLvFjAkb+YAb88Hx41k3sJrnc8y90DrtHNZ3hXwy9nxu8gHRfYcgqWRhc6PYXByguK46dYp8GRwVWhv5xChdH\/mETvbrygSU3tM\/\/cZgw9h1DolzMR4VC5PUuAsSWz1QJsiK11hQLgDEM0tt5hTLQT6AxdUnT1YX4HGJGOYJBBKkiOSjjoc+Pyfkk7F3Yf8HAEY3nF6VCTxnZW66wVw3n\/oCEkIrWVu4dd0NXxfUNrdbjNL1rYxD5AMywAdP4uuyui41Wz9hgoLDtik\/OcgH5IcfuDeJcjMrtIeanSJl282yTNxjFiRmmRiAAfdHwcdHxLZsBDnbO2xlC\/lk6nHY71m0aJEKBRysWLFCHT58WJ118GBlxXA3g30K1+Uasp3ED018M1IoJWwm+cQSsS8bASW1jsuVgvLgXkmdTNYh3HS3WywOtjpw4QCECQeIbZ\/QgiQke+rvbeRDuWLeJwdiCs+EFg+wzwVRjbYFSeq2DlN506dPr5oL\/8J++IIFCyod2MXPKyZPnvyLLgrmXMkHiAfeQ9bHMr53zz1q3qc+FUU+rmwEJvmYriVfplwzkg7PSPiUV2wfmW6tWKXrSy6K7hZc6QIWH\/mdT5NT1euWmFlWbLtdBIC53WJxsJUL\/QnBIy7igXeaimKj4pWDfKBuJGI870OVR55Lg8DSpUvVsmXLBoUJ+aTB1RvhpleB5AMBCcD6r3nmGXXv97\/PvpTMF36qu8kwOwHHh6\/vJ+VUuCnJx0xQipjb9m1A2d717ZtIhwFx3wTcbHcdP17tGaR2uYGs+oIhJfm4hneXN871PZ\/UWEB5ZiRnFwk4kVrqVDFg8cDPzJkzKxIS8knQPQsXLlTgRtu2bZv1bI+NfBD40J6ESzzfat8kJu69ILpLL8f5HmyT6XajBkqYmAAWmJnB\/A6J+FO\/tTwqxxauwsHtA\/\/PYQGa5BOLA3Uoo4vvuf93gGwBUstO8Zxu+aQmH598XSbkFLh2pQzZ80nYE+YBUyx6586davXq1aNqMoGnZCuwierLOADnU74z\/Rr1L3\/8y7M73A\/KBPtQUE\/qMy0h8uGeRwGrAdKn2N5DIt77TzaRrnnwYQ2b9nUyBPj6Qbd8cpMPyNG1fR4dm6bIh7so484jed6OgJBPSyPDBD723IjvvR1zdqu\/e+FgrfBQ2OuADyhbW2bnFPDZ7lmBdnFzpvkIPMUZEWiry12TAgckA9zzyUE+Zh6yVHLnKEd3u+XAAmWGA6Mpk8PmwKKPZQr5tNSrqcjHpXDRTfH7039b7XnhYHQroRyY+LlW+iBYqjtnXOmGwK33ia\/9YUWeOdsRDbL2or6YiLWGQ3J0LbDAJW9O8uEE34TwlO\/jEBDyicOt9lsm8LEJO00FhVFc9\/\/te6JCt2s3LKIAc88n1gq0rY5B0b7qpdPq3V+6lh1JGNGU2q\/kIp8S9zH0sR27J+ojNrgehBOAU7tzpYBRCAj5tDQgUpGPS+F+64l\/pe4\/8jQ7eq4NOGzkA6fQKSfxdXldm9Lzz5peYcE9Q9UGFvo5n1gStsmNOftKUrY6+aS2AiGl1NRfuygq+KSNcdHHOoV8WupVE\/jY7AEuhZt6suaEybT6Yq1AkBH2qNZOeb06d9a9gzDq1KvmnFjkJJ\/SUsPkJJ+cfShl0xAQ8qHhlPwpG\/nE3tsCUW3\/83dvUzc\/9bGBnDnP5aQGwySbWCIGuTCw4DXXPa1u\/eb86gxPSVjo1k5Kyyd1nzVRnr7nkwIL7sHiJto4zHUI+bTU+ybwdaKxvnHpJ9XXzzpzFPnUsR6ahsR0u8Xe2wLK5UuHv1Od4tcj81IorqYw0WWt24dNXfqWCxvd8knRh5IYNFdPxZUr5BOHW+23UpKPjbjqWA+1G8cswHaFATUBpl4V+PE\/+Yb\/oH74xctGkU8smTGbkeTxlOQDAnX5HE8IsNTkE6pPvm8WASGfZvEe1GYCH5PFGe\/h+d2vvHVMupecGQlSQ2au8GOtQDiv8ez\/\/lN1xQ\/+YlSwAmCR82BoSjz0PZ+SFhApMcCydLdbrBUI1jCMiwU7puUQUcqsgYCQTw3w6ryqAx+b0RrqBwK68cBXqrta9OiwWAVep02x75qKJYaIsW5boEWKVPyxbeO+p1s+MRZbn\/Y1UpBP6dYfd\/yU9LyQT0u9lYp8QHzTH95kHqwU8OluN85111g3+PIxhNh1904JYdZmX8aQD6zyIarNl7E8RZ81UYbel8NuBTaBd9N1CPk0jfiv6tOBh4zW248dI51Dsa1sTYVLvT67paaPqdZGPhyygPfxzhXz3FNpWOhut5Ks1xxjySQfTjSoeR15DvmkzHoICPnUwy\/6bRv5QC4zW5p3vRLb9ca2u3eAzLiJOaMbU\/PF1NcIgJsNyauk807oIsLcbhzy6aOyNcmHc40FXAQHFuDnfrCh5uiU13MhIOSTC9lAuTbyoZIF7PPo98ijqwrJi3JrZ0vNtlYbk8kZMFh5+afVDY\/+3pgy9T0jwAJ+uNkS2sJHx4KzVwXW33MnnumVstX3fDhE3FbfSb08BIR8eHgle9okH9h052Zx1oXRL36LjQxK1jhmQfqqnZKNAFyPa9\/8sDMTsX7HUcy+CVP8pI+b5FNCMtSkAGiF6ZYPhXxgXLz\/dR+Xa69zdUjicoV8EgNKLU4H\/p\/\/8IfV6txHPuZZGLOepi5+o7aP85xOPimsNpN8SgmzBsyQfODuJOjT0N5Xyed4QmNEJx9qBCQEXIw8edMoz0CoHvm+HQSEfNrBXXHJJyQmKly42vmRo0erQ5Zw0r+EDyelDOXiL30PjKLAu4QREvEdX31jkHzQLfXvvjm\/l8pWd7tRyadLfSmy+BEQ8mlphOjA\/9t9+8ac00GxqKnw9VtHqZFzLTV9TLUc8oGV7dM\/\/YbXtYKuO7B4zPNPXWmzSw6u5UMh46632SUfks+\/\/vx5XiKmzpFSceir3EI+LfWsDvy9e\/dWUpib4ujDPm\/CRcF7R9BddWDcuDHZDlpqIrla3e2War8KLB7AghOeSxY444NIPmC5wiKCEgGZUZxWi6ZasEBScDfPXd++qUokK58yEBDyaamfTPJxhZFyfNh4EK+kPQ6AP0dKGYgAxE8ofL2lIWCtFrH4zJcvd5IPRPr9+zc\/XFl\/fThM6sKfSj7wfp8twC6Nz5SyCPmkRJNRlg78ju9+t8o9Bvs1dT8wYbt+VbTZRjOljI2IKe62uth14X0kn7\/5q9+urhenht93QfbUMpiu5GG2AlNj24XyhHxa6gUd+KeefroKENBJo8SbJ2Oh1MnHFlKLodV4P09sPSW8h1jAQmTYyQf3fP7skcmVFWgSMViA1174AQmtLmFgW2QU8mmp40zyMUNqOe62lpqQrFrd7TbsUU1IPrAQMcPvhy1DM1o+sDBzEXGfQ82TTbCOFiTk01LHIPAffe971Re\/+93geY6WxGykWl94sZ63rRFhWq7ERz6AxWXnXmnN6tCy2FmqR\/JZP2FC8BxcFgGk0KwICPlkhdddOAL\/Z+9+t7r3+98fRDWZqXNaEq\/Ran3hxZCjq6\/nWGwgIxGf+vxvFhcmnnrQoNvtm\/91krr65MlBNChYgPCRyLbUiDdbnpBPs3gPajPJB\/zZ6FaBCCbM0tySeI1WK+HFL8ONWECYOHxKyUmXY8Ag+Rz6LxNHEfEw7YfmwLUrZQr5tNQTCPw33\/lONffv\/36QWgf2emzJMlsSs5Fq9QivkpKA5gBHJx88o4RJVIch4ELHFN1uj5155hgiHkYPQY7x1maZQj4toe8in5bEabVaJJ8f7riscq8sm3ZZlSCyb1maKSAjFrMfviRZ+D2l3i4+o5MP5zqFLrZFZBqLgJBPS6MCgT\/zbW9Thw8fVv\/5TWsV3uPSkkitVYurfchFh+lwhtEChA4Q8nl5GJrk84UL3lodrl2wY1prY1UqToeAkE86LFklIfCH\/uAP1K4jR9TEuX9VXX6l39PDKrDgh2Wf4+XOQywgQ8PaKa9X5866N5haqeCu94qOez4ztpw9sAL1K9P72u5haZeQT0s9jcDPuPZa9bGf\/ay4rAQpYcPV\/vmP\/GM1Zda96sq9H09ZfFFlAfmsPnGikvlTv7lcXfhb\/2bo9gCxw9Dygd+H+V6jogYwQ1ghHwZYlEdnz56t1q1bpyZOnKiOHz+u1qxZo3bt2jXmVQD+z2+5RU1\/979QC8c9X8z1BxQMuM\/orqZd8\/cFs1Zzyy\/peZ18Qnf5lNSuGFl18nny7f9DXbtnYUwx8k5HERDySdwxmzdvrkpcsmSJ0v9vVgPA\/8fFi9Xz\/2m6+v6k1wzt6hZwEYX78ugAIl48faGa\/d8uGeqM1oAIut0u\/8rbFJDPMJ33SqyWOlmckE\/CbkGrZ\/v27WpkZEQtXLhQLV68WK1du3aM9YPk88Mv\/TI3VR+yE0+fPl1dd911aseOHVUQBfWjk08Xk0fGtovafv05wOKj46aqvVduUg+f\/D\/Zzns12aYYHHTyectfnqU+MfcvSViU0K4YPPrYLiGfmJHgeAfIZvny5eq+++5TW7durchH\/11\/DYD\/7Otfr753zz29OUgYO5hgtf\/L0OoDnbQAY9sVM7SQiOEaiD98zXXZAlCabFMMDvAOut0AC98V8+a82rhxo1qwYAFrARQrY1PvldBfXCxKaNMrJk+e\/Atuw9p43rR0wBK69dZb1QMPPFCRkf65\/DVXqNte\/9\/VL77+umoztQ8fWJ3BxF+xYgVr4s+Z+M8q8vne6b9RI9\/+aOegiG1XTEMAC3C7nbfnmqyLkibbFIMDvAOHr5df+Yg6OPkldfNTHyMVU0K7SA0xHupju7BNXV4o9JZ8\/vTCu9TUm55RJy+4IGY89uadSQ8\/rP7Rn\/yJOvCZz6gTV1zRm3bFNOTkjqPqxJMT1bl\/dHjox8WE3bvV\/91+njrzuklq3JXnxsAp73QcgSeeeKJarHb1UxT5UN1uAPZVJ0+qE7NndxX3RuU68+BBdWrISRgBFyxeHnoXnT6tDpxxRqNjUSprDgHYG+bsDzcn2S9rKoZ8TDebL+CgaRClPkFAEBAEBAEeAsWQDzSLGmrNg0CeFgQEAUFAEGgagaLIh3rItGkQpT5BQBAQBAQBHgJFkQ+vafK0ICAICAKCQFcREPLpas+IXIKAICAI9BiB3pHP+vXr1Zw5c6ou27lzp1q9enVnu0+XFYTcsmVLlb0BPj4XY+x3TQNhpkCKlbsL7tYZM2aoDRs2qPPPP3\/M2Cq5XbrsfRiDMOaOHDkyat77dEKO73LMM7NdZr8dOnRIrVq1Su3fv7+qvoR29Yp89KwH0AGuDAg5Bge3zJUrV6p58+YNkqPC79dff311kBQOzfqCK2K\/48pY53loz6JFi9TevXurXHzwiZW7C4EmIMM555xTTfCpU6dWCW4x1VOp7UJC3bdvX6WsSx+D0A+XXnrpqEWnTyfk+K7OnHG9a7bL7Df8\/dixY9VcK6VdvSIfYPtLLrlksAKwrYJyDI4UZeq563bv3j+P1s8AAANzSURBVD1Kuelh5VCXrvio39myf6eQ21YGTIY77rhDTZkyRR08eLCaEL7cfF1vky+bRunt0sdSqWMQ5X7xxRer4fjUU08NLB+fTsjxXco55WuXWY\/elhtuuMGpB2PbnLJdWFavyMd08\/gyX+cAs06Z+sQHt4HrQK1p0VFXOWYKojqyht6FAQ6fadN+eSumuRozc\/N1vU2mlaq335dzsOvtslk+aI1ffPHFxYxBmDsg7+OPP165RtGSM63tXNZ3Lj3ja5ePfG677bbBvEvV5tCcj\/m+d+Sj+3tBCYICRLdPDEBNvQOyQjJAuKMIJpKesVtfeYM8Md81RT4g680336zuvPNOdeONN44inxi5fe1tqk1APnPnzq2suFmzZlVtwv1EX87BrvcVjm106+j7BiW2yyRTVLwunWB6RnR9EftdDn1ha5deDy5cIZ0OuE9jZfe9l6NdQj45UGWWifsjGHBQ4sTXFdmePXuqwAl9RVhym7B\/dMKBnFnbtm2rNrdLJVVTaZlWdGntGkbywTbD\/MOAAyEfpgJO8XiJbjeTeACHUl05IPf8+fPVLbfcUkXdmORTqivR5nbDtsH9StKul6838bkac1uqLvJB128qF1TTesZl+diIJ5erMYV+NsvoleVjutm6HnBgRhdh5\/jy2MEz+lUSZsCB67smAg7M0HFsD7hz4OqLD3\/4w4MrMKhy+9rbRJtwMWBeXIhj66GHHorqjy60y0eqd999d3Htsilpn07I8V0OJW1rlxnhptdbSrt6RT4lhVqDrOi6wbM9+gAqNXzX1YZcq84ck90s05z8pmVaal\/Z3G76mCytXTYlTQ3I8VlsnO9yjEeXRYeh\/3i2B+vO0eYc7eoV+QBApRwydVkJuK9Q8sFFff9Hd3mU3CbzkGlfDgTjImj8+PFVt5XcLpd7KseByyb1jNku84Apzrfjx48Pzg3maHNqAuod+aQGSMoTBAQBQUAQSI+AkE96TKVEQUAQEAQEgQACQj4yRAQBQUAQEAQaR0DIp3HIpUJBQBAQBAQBIR8ZA4KAICAICAKNIyDk0zjkUqEgIAgIAoKAkI+MAUFAEBAEBIHGERDyaRxyqVAQEAQEAUFAyEfGgCAgCAgCgkDjCAj5NA65VCgICAKCgCAg5CNjQBAQBAQBQaBxBIR8GodcKhQEBAFBQBD4\/xqc5RNxXGXHAAAAAElFTkSuQmCC","height":250,"width":415}}
+%---
+%[output:4139e40a]
+%   data: {"dataType":"text","outputData":{"text":"\n                                        First-order                     Norm of \n Iteration  Func-count      Resnorm      optimality       Lambda           step\n     0           3          81879.3               0         0.01\n\nOptimization completed: The final point is the initial point.\nThe <a href = \"matlab: helpview('optim','firstorder_lsq','CSHelpWindow');\">first-order optimality measure<\/a>, 0.000000e+00, is less than\n<a href = \"matlab: helpview('optim','function_tolerance_lsq','CSHelpWindow');\">1e-4*options.FunctionTolerance<\/a> = 1.000000e-10.\n\n","truncated":false}}
+%---
+%[output:5c5b65f0]
+%   data: {"dataType":"textualVariable","outputData":{"name":"J","value":"2.1000"}}
+%---
+%[output:7c46cee9]
+%   data: {"dataType":"textualVariable","outputData":{"name":"b","value":"0.9330"}}
+%---

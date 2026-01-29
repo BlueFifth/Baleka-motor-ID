@@ -10,3 +10,9 @@ First run the step tests. For the given experiment the matrix of step params
 in StepParams.m was run through twice. 
 
 Following this the data was used for LSQ optimization using the model and real data.
+
+
+Start by using high osc samples with low step time - i.e. don't weigh
+the steady state values highly. This will ideally find better local minima
+
+Fixed step solver mode! NB!
