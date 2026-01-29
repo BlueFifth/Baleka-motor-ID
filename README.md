@@ -16,3 +16,7 @@ Start by using high osc samples with low step time - i.e. don't weigh
 the steady state values highly. This will ideally find better local minima
 
 Fixed step solver mode! NB!
+
+Change bounds!
+Ct<= Bt must be inforced by limits not constraints
+https://www.mathworks.com/help/optim/ug/iterations-can-violate-constraints.html
