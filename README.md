@@ -15,8 +15,18 @@ Following this the data was used for LSQ optimization using the model and real d
 Start by using high osc samples with low step time - i.e. don't weigh
 the steady state values highly. This will ideally find better local minima
 
-Fixed step solver mode! NB!
-
 Change bounds!
-Ct<= Bt must be inforced by limits not constraints
-https://www.mathworks.com/help/optim/ug/iterations-can-violate-constraints.html
+Ct<= Bt must be inforced by limits not constraints [read more here](https://www.mathworks.com/help/optim/ug/iterations-can-violate-constraints.html)
+
+Results:
+
+
+M3 simple:
+J = 0.015918
+b = 0.01399
+
+M3 full
+J = 0.015918
+b = 0.000018
+Bt = 0.8037
+Ct = 0.2798
