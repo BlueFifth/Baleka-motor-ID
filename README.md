@@ -18,8 +18,16 @@ the steady state values highly. This will ideally find better local minima
 Change bounds!
 Ct<= Bt must be inforced by limits not constraints [read more here](https://www.mathworks.com/help/optim/ug/iterations-can-violate-constraints.html)
 
-Results:
+Results: (in unscaled units (proper measurements))
+M2 simple:
+J = 0.01544
+b = 0.01181
 
+M2 full
+J = 0.015369
+b = 0.0414
+Bt = 0.3453
+Ct = 0.1394
 
 M3 simple:
 J = 0.015918
@@ -30,3 +38,23 @@ J = 0.015918
 b = 0.000018
 Bt = 0.8037
 Ct = 0.2798
+
+M5 simple:
+J = 0.015617
+b = 0.01350
+
+M5 full
+J = 0.011016
+b = 0.0000019
+Bt = 0.3028
+Ct = 0.2288
+
+M6 simple:
+J = 0.016061
+b = 0.01292
+
+M6 full
+J = 0.016038
+b = 0.0000014
+Bt = 0.4402
+Ct = 0.2418
