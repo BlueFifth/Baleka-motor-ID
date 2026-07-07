@@ -11,50 +11,28 @@ in StepParams.m was run through twice.
 
 Following this the data was used for LSQ optimization using the model and real data.
 
-
 Start by using high osc samples with low step time - i.e. don't weigh
 the steady state values highly. This will ideally find better local minima
 
 Change bounds!
 Ct<= Bt must be inforced by limits not constraints [read more here](https://www.mathworks.com/help/optim/ug/iterations-can-violate-constraints.html)
 
+Please see full thesis for more detail.
+
+---
 Results: (in unscaled units (proper measurements))
-M2 simple:
-J = 0.01544
-b = 0.01181
+For the simple model:
+| Motor | J        | b       |
+|-------|----------|---------|
+| M2    |  0.01544 | 0.01181 |
+| M3    | 0.015918 | 0.01399 |
+| M5    | 0.015617 | 0.01350 |
+| M6    | 0.016061 | 0.01292 |
 
-M2 full
-J = 0.015369
-b = 0.0414
-Bt = 0.3453
-Ct = 0.1394
-
-M3 simple:
-J = 0.015918
-b = 0.01399
-
-M3 full
-J = 0.015918
-b = 0.000018
-Bt = 0.8037
-Ct = 0.2798
-
-M5 simple:
-J = 0.015617
-b = 0.01350
-
-M5 full
-J = 0.011016
-b = 0.0000019
-Bt = 0.3028
-Ct = 0.2288
-
-M6 simple:
-J = 0.016061
-b = 0.01292
-
-M6 full
-J = 0.016038
-b = 0.0000014
-Bt = 0.4402
-Ct = 0.2418
+For the full model:
+| Motor | J        | b         | Bt     | Ct     |
+|-------|----------|-----------|--------|--------|
+| M2    | 0.015369 |    0.0414 | 0.3453 | 0.1394 |
+| M3    | 0.015918 |  0.000018 | 0.8037 | 0.2798 |
+| M5    | 0.011016 | 0.0000019 | 0.3028 | 0.2288 |
+| M6    | 0.016038 | 0.0000014 | 0.4402 | 0.2818 |
